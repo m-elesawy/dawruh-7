@@ -63,8 +63,10 @@ function getOtherPageHtml() {
     return `
         <div class="mt-4 mb-4 p-3 bg-white rounded shadow-sm">
 
-            <h4 class="mb-3 text-primary">تقرير المساهمات الأخرى</h4>
-            <div class="alert alert-info mb-4">رصد كامل للمدفوعات والمستحقات المتعلقة بالمساهمات الأخرى لكل وحدة</div>
+         <div class="p-3 d-flex justify-content-between align-items-center">
+            <div><h4 class="mb-0 text-primary">تقرير المساهمات الأخرى</h4></div>        
+            <div><button onclick="navigate('home',event)" class="btn btn-outline-primary">عودة <i class="fas fa-arrow-left me-2"></i></button></div>
+        </div>
 
             <!-- بداية جدول الوحدات المسددة للمساهمات الأخرى -->
             <h5 class="mt-4 mb-2 text-success">الوحدات المسددة لكامل مستحقات المساهمات الأخرى</h5>
