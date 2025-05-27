@@ -1,178 +1,200 @@
 // =======================
-// بداية كود صفحة مساهمات أخرى (فلتر نوع واحد فقط - مع وصف المبالغ)
+// بداية كود صفحة مساهمات أخرى منفصلة (يقرأ من other.json مباشر)
 // =======================
 
+// مصفوفة لتخزين بيانات مساهمات أخرى بعد تحميلها من ملف other.json
 let otherData = [];
-let groupedData = {};
 
 /**
- * تحميل بيانات ملف JSON
+ * دالة تحميل بيانات مساهمات أخرى من ملف other.json
+ * @param {function} callback - دالة يتم تنفيذها بعد تحميل البيانات بنجاح أو فشل
  */
 function loadOtherData(callback) {
-    fetch(`other.json?v=${new Date().getTime()}`)
+    fetch('other.json')
         .then(res => res.json())
         .then(data => {
-            otherData = data || [];
-            groupDataByType();
-            if (callback) callback();
+            otherData = data;
+            if (callback) callback(); // استدعاء الدالة بعد التحميل
         })
         .catch(err => {
             alert('فشل تحميل بيانات مساهمات أخرى. تأكد من وجود الملف other.json');
-            console.error(err);
             otherData = [];
-            groupedData = {};
-            if (callback) callback();
+            if (callback) callback(); // استدعاء الدالة حتى في حال الفشل
+            console.error(err);
         });
 }
 
 /**
- * تجميع حسب نوع المساهمة
- */
-function groupDataByType() {
-    groupedData = {};
-    otherData.forEach(rec => {
-        const type = rec["نوع المساهمة"] || "غير محدد";
-        const unit = rec["رقم الوحده"];
-        const value = Number(rec["قيمة المساهمة"]) || 0;
-        const paid = Number(rec["المدفوع"]) || 0;
-        const remain = Math.max(0, value - paid);
-
-        if (!groupedData[type]) {
-            groupedData[type] = {
-                totalPaid: 0,
-                totalRemain: 0,
-                records: []
-            };
-        }
-
-        groupedData[type].totalPaid += paid;
-        groupedData[type].totalRemain += remain;
-        groupedData[type].records.push({ unit, value, paid, remain });
-    });
-}
-
-/**
- * تنسيق المبلغ بالعملة مع وصف
- */
-function formatEGP(amount, label) {
-    return `EGP ${amount.toLocaleString('en-EG', { minimumFractionDigits: 0 })} <span class="text-muted small">(${label})</span>`;
-}
-
-/**
- * إنشاء HTML الصفحة
+ * دالة توليد HTML صفحة مساهمات أخرى
  */
 function getOtherPageHtml() {
-    const types = Object.keys(groupedData);
-    const filterOptions = types.map(type => `<option value="${type}">${type}</option>`).join("");
+    let paidRows = '';
+    let unpaidRows = '';
+    let totalPaid = 0;
+    let totalRemain = 0;
+
+    (otherData || []).forEach(rec => {
+        let unit = rec["رقم الوحده"];
+        let type = rec["نوع المساهمة"] || "";
+        let value = Number(rec["قيمة المساهمة"]) || 0;
+        let paid = Number(rec["المدفوع"]) || 0;
+        let remain = Math.max(0, value - paid);
+
+        if (paid >= value && value > 0) {
+            totalPaid += paid;
+            paidRows += `<tr>
+                <td>${unit}</td>
+                <td>${type}</td>
+                <td>${value}</td>
+                <td>${paid}</td>
+            </tr>`;
+        } else if (value > 0) {
+            unpaidRows += `<tr>
+                <td>${unit}</td>
+                <td>${type}</td>
+                <td>${value}</td>
+                <td>${paid}</td>
+                <td>${remain}</td>
+            </tr>`;
+            totalRemain += remain;
+        }
+    });
 
     return `
-        <div class="p-3 d-flex justify-content-between align-items-center">
-            <div><h4 class="mb-0 text-primary">تقرير المساهمات الأخرى</h4></div>        
-            <div><button onclick="navigate('home',event)" class="btn btn-outline-primary">عودة <i class="fas fa-arrow-left me-2"></i></button></div>
-        </div>
+        <div class="mt-4 mb-4 p-3 bg-white rounded shadow-sm">
 
-        <div class="mb-4 p-3 bg-white rounded shadow-sm">
-            <div class="d-flex justify-content-between mb-3">
-                <div>
-                    <label for="contribFilter" class="form-label fw-bold">اختر نوع المساهمة:</label>
-                    <select id="contribFilter" class="form-select">
-                        ${filterOptions}
-                    </select>
-                </div>
-                <button id="printFiltered" class="btn bg-primary text-white align-self-end">
-                    <i class="fas fa-file-pdf me-2"></i> طباعة التقرير الحالي
-                </button>
+            <h4 class="mb-3 text-primary">تقرير المساهمات الأخرى</h4>
+            <div class="alert alert-info mb-4">رصد كامل للمدفوعات والمستحقات المتعلقة بالمساهمات الأخرى لكل وحدة</div>
+
+            <!-- بداية جدول الوحدات المسددة للمساهمات الأخرى -->
+            <h5 class="mt-4 mb-2 text-success">الوحدات المسددة لكامل مستحقات المساهمات الأخرى</h5>
+            <div class="d-flex justify-content-end mb-2">
+                <button id="printPaidOther" class="btn btn-outline-success">طباعة بيانات الوحدات المسددة</button>
             </div>
+            <div id="paidOtherDiv" class="table-responsive mb-4">
+                <table class="table table-bordered">
+                    <thead>
+                        <tr>
+                            <th colspan="4" class="text-center bg-success text-white">سجل الوحدات المسددة للمساهمات الأخرى</th>
+                        </tr>
+                        <tr>
+                            <th>رقم الوحدة</th>
+                            <th>نوع المساهمة</th>
+                            <th>قيمة المساهمة المطلوبة</th>
+                            <th>إجمالي المدفوع</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${paidRows || `<tr><td colspan="4" class="text-center">لا توجد وحدات قامت بالسداد الكامل بعد</td></tr>`}
+                        <tr class="bg-info text-white font-weight-bold">
+                            <td colspan="3">إجمالي السداد</td>
+                            <td>${totalPaid}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <!-- نهاية جدول الوحدات المسددة للمساهمات الأخرى -->
 
-            <div id="contribTableContainer" class="table-responsive"></div>
+            <br><br><br><br>
+
+            <!-- بداية جدول الوحدات غير المسددة أو المسددة جزئياً للمساهمات الأخرى -->
+            <h5 class="mt-4 mb-2 text-danger">الوحدات غير المسددة أو المسددة جزئياً لمستحقات المساهمات الأخرى</h5>
+            <div class="d-flex justify-content-end mb-2">
+                <button id="printUnpaidOther" class="btn btn-outline-danger">طباعة بيانات الوحدات غير المسددة</button>
+            </div>
+            <div id="unpaidOtherDiv" class="table-responsive">
+                <table class="table table-bordered">
+                    <thead>
+                        <tr>
+                            <th colspan="5" class="text-center bg-danger text-white">سجل الوحدات غير المسددة للمساهمات الأخرى</th>
+                        </tr>
+                        <tr>
+                            <th>رقم الوحدة</th>
+                            <th>نوع المساهمة</th>
+                            <th>قيمة المساهمة المطلوبة</th>
+                            <th>إجمالي المدفوع</th>
+                            <th>المتبقي</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${unpaidRows || `<tr><td colspan="5" class="text-center">كل الوحدات ملتزمة بالسداد الكامل</td></tr>`}
+                        <tr class="bg-danger text-white font-weight-bold">
+                            <td colspan="4">إجمالي المتبقي على الوحدات</td>
+                            <td>${totalRemain}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <!-- نهاية جدول الوحدات غير المسددة أو المسددة جزئياً للمساهمات الأخرى -->
+
         </div>
     `;
 }
 
 /**
- * تفعيل زر الطباعة والفلتر
+ * دالة تفعيل أزرار الطباعة الخاصة بصفحة المساهمات الأخرى
  */
 function activateOtherPrintButtons() {
-    const select = document.getElementById('contribFilter');
-    const printBtn = document.getElementById('printFiltered');
-    const container = document.getElementById('contribTableContainer');
-
-    select.onchange = updateTable;
-    updateTable();
-
-    printBtn.onclick = function () {
-        const element = container;
-        const originalClass = element.className;
-        element.className += " mt-4 mb-4 p-3 bg-white rounded shadow-sm";
-        html2canvas(element, { scale: 2 }).then(canvas => {
-            const imgData = canvas.toDataURL('image/png');
-            const imgWidth = canvas.width * 0.75;
-            const imgHeight = canvas.height * 0.75;
-            const pdf = new jspdf.jsPDF({
-                orientation: imgWidth > imgHeight ? "landscape" : "portrait",
-                unit: "pt",
-                format: [imgWidth, imgHeight]
+    // طباعة جدول المدفوع
+    const printPaidBtn = document.getElementById('printPaidOther');
+    if (printPaidBtn) {
+        printPaidBtn.onclick = function () {
+            let element = document.getElementById('paidOtherDiv');
+            let originalBg = element.style.backgroundColor;
+            let originalClass = element.className;
+            element.style.backgroundColor = "#fff";
+            element.className += " mt-4 mb-4 p-3 bg-white rounded shadow-sm";
+            html2canvas(element, { scale: 2 }).then(function (canvas) {
+                var imgData = canvas.toDataURL('image/png');
+                var imgWidth = canvas.width * 0.75;
+                var imgHeight = canvas.height * 0.75;
+                var pdf = new jspdf.jsPDF({
+                    orientation: imgWidth > imgHeight ? "landscape" : "portrait",
+                    unit: "pt",
+                    format: [imgWidth, imgHeight]
+                });
+                pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+                pdf.save("سجل_الوحدات_المسددة_مساهمات_اخرى.pdf");
+                element.style.backgroundColor = originalBg;
+                element.className = originalClass;
             });
-            pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
-            const filename = `تقرير_${select.value}.pdf`;
-            pdf.save(filename);
-            element.className = originalClass;
-        });
-    };
+        }
+    }
+
+    // طباعة جدول غير المدفوع
+    const printUnpaidBtn = document.getElementById('printUnpaidOther');
+    if (printUnpaidBtn) {
+        printUnpaidBtn.onclick = function () {
+            let element = document.getElementById('unpaidOtherDiv');
+            let originalBg = element.style.backgroundColor;
+            let originalClass = element.className;
+            element.style.backgroundColor = "#fff";
+            element.className += " mt-4 mb-4 p-3 bg-white rounded shadow-sm";
+            html2canvas(element, { scale: 2 }).then(function (canvas) {
+                var imgData = canvas.toDataURL('image/png');
+                var imgWidth = canvas.width * 0.75;
+                var imgHeight = canvas.height * 0.75;
+                var pdf = new jspdf.jsPDF({
+                    orientation: imgWidth > imgHeight ? "landscape" : "portrait",
+                    unit: "pt",
+                    format: [imgWidth, imgHeight]
+                });
+                pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+                pdf.save("سجل_الوحدات_غير_المسددة_مساهمات_اخرى.pdf");
+                element.style.backgroundColor = originalBg;
+                element.className = originalClass;
+            });
+        }
+    }
 }
-
-/**
- * تحديث محتوى الجدول حسب النوع المختار
- */
-function updateTable() {
-    const selected = document.getElementById('contribFilter').value;
-    const container = document.getElementById('contribTableContainer');
-    const data = groupedData[selected];
-
-    let html = `
-        <table class="table table-bordered">
-            <thead>
-                <tr class="bg-secondary text-white text-center">
-                    <th>رقم الوحدة</th>
-                    <th>نوع المساهمة</th>
-                    <th>قيمة المساهمة</th>
-                    <th>المدفوع</th>
-                    <th>المتبقي</th>
-                </tr>
-            </thead>
-            <tbody>`;
-
-    data.records.forEach(rec => {
-        html += `
-            <tr>
-                <td>${rec.unit}</td>
-                <td>${selected}</td>
-                <td>${formatEGP(rec.value, "المطلوب")}</td>
-                <td>${formatEGP(rec.paid, "مدفوع")}</td>
-                <td>${formatEGP(rec.remain, "غير مدفوع")}</td>
-            </tr>`;
-    });
-
-    html += `
-        <tr class="bg-info text-white fw-bold">
-            <td colspan="3">إجمالي ${selected}</td>
-            <td>المدفوع: ${formatEGP(data.totalPaid)}</td>
-            <td>الغير مدفوع: ${formatEGP(data.totalRemain)}</td>
-        </tr>
-        </tbody>
-        </table>`;
-
-    container.innerHTML = html;
-}
-
 // =======================
-// نهاية كود صفحة مساهمات أخرى (فلتر نوع واحد فقط - مع وصف المبالغ)
+// نهاية كود صفحة مساهمات أخرى منفصلة (يقرأ من other.json مباشر)
 // =======================
 
 /*
 طريقة الاستدعاء في صفحة العرض:
 else if (page === 'other') {
-    loadOtherData(function () {
+    loadOtherData(function() {
         document.getElementById('pageContent').innerHTML = getOtherPageHtml();
         activateOtherPrintButtons();
     });
